@@ -1,213 +1,274 @@
 #!/usr/bin/env python
 
 import sys
+import os
 import serial
 import argparse
 import struct
+import platform
+import tempfile
 
+DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
+DEFAULT_CSV_FILE = 'gq-gmc-log.csv'
+if platform.system() == 'Windows':
+    DEFAULT_PORT = '\\.\COM4'
+else:
+    DEFAULT_PORT = '/dev/ttyUSB0'
+DEFAULT_BAUDRATE = 115200
+
+EOL = '\n'
+VERSION = '1.0.0'
 
 def handleArguments():
-    parser = argparse.ArgumentParser(description='Control tool for the GQ GMC-500 series.')
-    parser.add_argument('-y', '--device-type', action='store_true', default=None,
-                       help='Get the device type and revision.')
-    parser.add_argument('-b', '--baudrate', action='store', default=115200,
+    parser = argparse.ArgumentParser(description='Control tool for the GQ GMC-500 series.',
+                                     epilog="Copyright (c) 2017, Chaim Zax")
+    group = parser.add_argument_group(title='commands', description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
+    command_group = group.add_mutually_exclusive_group(required=True)
+
+    # device settings
+    parser.add_argument('-b', '--baudrate', action='store', default=DEFAULT_BAUDRATE, type=int,
+                       help='set the baudrate of the serial port (default %d)' % (DEFAULT_BAUDRATE))
+    parser.add_argument('-p', '--port', action='store', default='',
+                       help='set the serial port (default \'%s\')' % (DEFAULT_PORT))
+    # command line configuration
+    parser.add_argument('-n', '--no-parse', action='store_true', default=None,
+                       help='do not parse the history data into a csv file, only store the binary data. use only in combination with the \'--data\' command option.')
+    parser.add_argument('-c', '--config', action='store', default=None,
+                       help='load command line options from a configuration file')
+    parser.add_argument('output_file', metavar='OUTPUT_FILE', nargs='?',
+                        help='an output file')
+
+    # device operations
+    command_group.add_argument('-i', '--device-info', action='store_true', default=None,
+                       help='get the device type and revision')
+    command_group.add_argument('-s', '--serial', action='store_true', default=None,
+                       help='get the serial number of the device')
+    command_group.add_argument('-o', '--power-on', action='store_true', default=None,
+                       help='powers on the device')
+    command_group.add_argument('-O', '--power-off', action='store_true', default=None,
+                       help='powers off the device')
+    command_group.add_argument('-h0', '--hearbeat0', action='store_true', default=None,
                        help='')
-    parser.add_argument('-p', '--port', action='store', default=None,
+    command_group.add_argument('-h1', '--hearbeat1', action='store_true', default=None,
                        help='')
-    parser.add_argument('-s', '--serial', action='store_true', default=None,
-                       help='Get the serial number of the device.')
-    parser.add_argument('-o', '--power-on', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-O', '--power-off', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-h0', '--hearbeat0', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-h1', '--hearbeat1', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-V', '--voltage', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-c', '--cpm', action='store_true', default=None,
-                       help='Get the current CPM.')
-    parser.add_argument('-t', '--temperature', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-g', '--gyro', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-d', '--data', action='store', default=None,
-                       help='')
-    parser.add_argument('-f', '--data-file', action='store', default=None,
-                       help='')
-    parser.add_argument('-P', '--parse', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-l', '--list-config', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-e', '--erase-config', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-w', '--write-config', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-u', '--update-config', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-T', '--set-time', action='store', default=None,
-                       help='')
-    parser.add_argument('-D', '--set-date', action='store', default=None,
-                       help='')
-    parser.add_argument('-k', '--send-key', action='store', default=None,
-                       help='')
-    parser.add_argument('-F', '--firmware-update', action='store', default=None,
-                       help='')
-    parser.add_argument('-R', '--reset', action='store_true', default=None,
-                       help='')
-    parser.add_argument('-r', '--reboot', action='store_true', default=None,
-                       help='')
+    command_group.add_argument('-V', '--voltage', action='store_true', default=None,
+                       help='get the current voltage of the battery (or power supply)')
+    command_group.add_argument('-C', '--cpm', action='store_true', default=None,
+                       help='get the current CPM')
+    command_group.add_argument('-T', '--temperature', action='store_true', default=None,
+                       help='get the current temperature')
+    command_group.add_argument('-G', '--gyro', action='store_true', default=None,
+                       help='get the current gyroscopic data')
+    command_group.add_argument('-d', '--data', action='store_true', default=None,
+                       help='download all history data and store it to file (default \'%s\' or \'%s\'). can be used in combination with the \'--no-parse\' option' % (DEFAULT_CSV_FILE, DEFAULT_BIN_FILE))
+    command_group.add_argument('-P', '--only-parse', nargs="?", type=str, dest="bin_file", const="",
+                       help='do not download history data, only parse the already downloaded data to a csv file (default \'%s\'). can be used in combination with the \'--data\' option to create a csv file with a different file-name' % (DEFAULT_CSV_FILE))
+    command_group.add_argument('-l', '--list-config', action='store_true', default=None,
+                       help='shows the current configuration')
+    command_group.add_argument('-e', '--erase-config', action='store_true', default=None,
+                       help='erase the current configuration')
+    command_group.add_argument('-w', '--write-config', action='store_true', default=None,
+                       help='write the configuration')
+    command_group.add_argument('-u', '--update-config', action='store_true', default=None,
+                       help='update the current configuration')
+    command_group.add_argument('-t', '--set-time', action='store', default=None,
+                       help='set the local time')
+    command_group.add_argument('-D', '--set-date', action='store', default=None,
+                       help='set the local date')
+    command_group.add_argument('-k', '--send-key', action='store', default=None,
+                       help='emulate a keypress of the device')
+    command_group.add_argument('-F', '--firmware-update', action='store', default=None,
+                       help='update the firmware of the device')
+    command_group.add_argument('-R', '--reset', action='store_true', default=None,
+                       help='reset the device to the default factory settings')
+    command_group.add_argument('-r', '--reboot', action='store_true', default=None,
+                       help='reboot the device')
+
+    command_group.add_argument('-S', '--show-config', action='store_true', default=None,
+                       help='shows the currently used command line configuration options')
+    command_group.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION)
 
     return parser.parse_args()
 
-GET_CPM_CMD           = "GETCPM"
-GET_CPS_CMD           = "GETCPS"
-GET_CFG_CMD           = "GETCFG"
-ERASE_CFG_CMD         = "ECFG"
-UPDATE_CFG_CMD        = "CFGUPDATE"
-TURN_ON_CPS_CMD       = "HEARTBEAT1"
-TURN_OFF_CPS_CMD      = "HEARTBEAT0"
-WRITE_CFG_CMD         = "WCFGAD"
+# "GETCPM"
+# "GETCPS"
+# "GETCFG"
+# "ECFG"
+# "CFGUPDATE"
+# "HEARTBEAT1"
+# "HEARTBEAT0"
+# "WCFGAD"
+#
+# "SETDATEMM"...
+# "SETDATEDD"...
+# "SETDATEYY"...
+# "SETTIMEHH"...
+# "SETTIMEMM"...
+# "SETTIMESS"...
+# "KEY"...
+# "SPIR"...
 
-SET_MONTH_CMD  = "SETDATEMM"
-SET_DAY_CMD  = "SETDATEDD"
-SET_YEAR_CMD  = "SETDATEYY"
-SET_HOUR_CMD  = "SETTIMEHH"
-SET_MINUTE_CMD  = "SETTIMEMM"
-SET_SECOND_CMD  = "SETTIMESS"
-KEY_CMD = "KEY"
-GET_HISTORY_DATA_CMD = "SPIR"
-
-FLASH_SIZE_GMC500 = 1048576  # 1Mbyte
-
+FLASH_SIZE = {}
+FLASH_SIZE['default'] = 0x00100000
+FLASH_SIZE['GMC-500'] = 0x00100000
 
 m_deviceType = None
+m_deviceName = 'default'
+m_port = None
 
 def clearPort():
     # close any pending previous command
-    port.write(">>")
+    m_port.write(">>")
 
     # get rid off all buffered data still in the queue
     while True:
-        x = port.read(1)
+        x = m_port.read(1)
         if x == '':
             break
 
 def checkDeviceType():
+    global m_deviceType, m_deviceName
+
     m_deviceType = getDeviceType()
-    if m_deviceType[:7] == 'GMC-500':
+    m_deviceName = m_deviceType[:7]
+
+    if m_deviceName == 'GMC-500':
         print("device found: %s" % m_deviceType)
-        
+
     else:
         print("device '%s' not supported" % m_deviceType)
         return -1
-    
+
     return 0
-        
+
 def getDeviceType():
-    port.write('<GETVER>>')
-    deviceType = port.read(14)
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETVER>>')
+    deviceType = m_port.read(14)
     return deviceType
 
 def getSerialNumber():
-    port.write('<GETSERIAL>>')
-    serialNumber = port.read(7)
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETSERIAL>>')
+    serialNumber = m_port.read(7)
     ser = ''
     for x in range(7):
         ser += "%02X" % ord(serialNumber[x])
     return ser
 
 def setPower(on=True):
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
     if on:
-        port.write('<' + TURN_ON_PWR_CMD + '>>')
+        m_port.write('<' + TURN_ON_PWR_CMD + '>>')
     else:
-        port.write('<' + TURN_OFF_PWR_CMD + '>>')
+        m_port.write('<' + TURN_OFF_PWR_CMD + '>>')
 
 def getVoltage():
-    port.write('<GETVOLT>>')
-    voltage = port.read(3)
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETVOLT>>')
+    voltage = m_port.read(3)
     return voltage
 
 def getCPM():
-    port.write('<GETCPM>>')
-    cpm = port.read(2)
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETCPM>>')
+    cpm = m_port.read(2)
     value = struct.unpack(">H", cpm)[0]
     return value
 
-def getData(address=0x000000, length=0x00100000, file=DEFAULT_BIN_FILE):
+def getData(address=0x000000, length=None, out_file=DEFAULT_BIN_FILE):
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
     if address == None:
         address = 0x000000
     if length == None:
-        length = 0x00100000
-    if file == None:
-        file = DEFAULT_BIN_FILE
-        
-    #length = 0x00200000 # 2Mbyte
+        length = FLASH_SIZE[m_deviceName]
+    if out_file == None or out_file == '':
+        out_file = DEFAULT_BIN_FILE
+
     total_len = 0
     sub_addr = address
     sub_len = 4096
-    
-    f = open(file, 'w')
-    
+
+    print("storing data to '" + out_file + "'")
+    f_out = open(out_file, 'w')
+
     while True:
         cmd = struct.pack('>sssssBBBHss', '<', 'S', 'P', 'I', 'R', (sub_addr >> 16) & 0xff, (sub_addr >> 8) & 0xff, (sub_addr) & 0xff, sub_len, '>', '>')
-        port.write(cmd)
-        
-        data = port.read(sub_len)        
+        m_port.write(cmd)
+
+        data = m_port.read(sub_len)
         if data == '' or total_len >= length:
             break
-        
-        f.write(data)
+
+        f_out.write(data)
         total_len += len(data)
         print("address: 0x%06x, size: %s, total size: %d bytes (%d%%)" % (sub_addr, sub_len, total_len, int(total_len*100/length)))
         sub_addr += sub_len
-        
-    f.close
 
-def printData(data_type, c_str, size=1):
+    f_out.close
+
+def printData(out_file, data_type, c_str, size=1):
     c0 = ord(c_str[0])
-    
+
     if size == 1:
         if c0 != 0xff:
-            print('%d,%s' % (c0, data_type))
-            
+            return('%d,%s' % (c0, data_type))
+
     elif size == 2:
         c1 = ord(c_str[1])
         if c0 != 0xff:
-            print('%d,%s' % (c0 * 256 + c1, data_type))
-            
+            return('%d,%s' % (c0 * 256 + c1, data_type))
+
     elif size == 3:
         c1 = ord(c_str[1])
         c2 = ord(c_str[2])
         if c0 != 0xff:
-            print('%d,%s' % (c0 * 256 * 256 + c1 * 256 + c2, data_type))
-            
+            return('%d,%s' % (c0 * 256 * 256 + c1 * 256 + c2, data_type))
+        else:
+            return(None)
+
     else:
-        print('(unsupported size: %d)' % (size))
-        
-    
-def parseDataFile(file=DEFAULT_BIN_FILE):
-    if file == None:
-        file = DEFAULT_BIN_FILE
-    print("parsing file " + file)
+        return('(unsupported size: %d)' % (size))
+
+
+def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE):
+    if in_file == None:
+        in_file = DEFAULT_BIN_FILE
+    print("parsing file '" + in_file + "', and storing data to '" + out_file + "'")
 
     marker = 0
-    cmd = ''
     data_type = '*'
-    f = open(file, 'r')
+    f_in = open(in_file, 'r')
+    f_out = open(out_file, 'w')
     while True:
-        c_str = f.read(1)
+        c_str = f_in.read(1)
         if c_str == '':
             break
         c = ord(c_str)
-        
+
         if marker == 0x55aa:
             if c == 0x00:
-                cmd = 'date-time'
-                date = f.read(9)
-                
+                date = f_in.read(9)
+
                 save_mode = ord(date[8])
                 if save_mode == 0:
                     data_type = ''
@@ -227,111 +288,182 @@ def parseDataFile(file=DEFAULT_BIN_FILE):
                 elif save_mode == 5:
                     data_type = 'CPM'
                     mode_str = 'every minute - threshold'
-                    
-                print(',,20%02d/%02d/%02d %02d:%02d:%02d,%s' % (ord(date[0]), ord(date[1]), ord(date[2]), ord(date[3]), ord(date[4]), ord(date[5]), mode_str))
+
+                f_out.write(',,20%02d/%02d/%02d %02d:%02d:%02d,%s' % (ord(date[0]), ord(date[1]), ord(date[2]), ord(date[3]), ord(date[4]), ord(date[5]), mode_str) + EOL)
             elif c == 0x01:
-                data = f.read(2)
-                printData(data_type, data, size=2)
-                
+                data = f_in.read(2)
+                value = printData(f_out, data_type, data, size=2)
+                f_out.write(value + EOL)
+
             elif c == 0x02:
-                data = f.read(3)
-                printData(data_type, data, size=3)
-                
+                data = f_in.read(3)
+                value = printData(f_out, data_type, data, size=3)
+                f_out.write(value + EOL)
+
             elif c == 0x03:
-                cmd = '3?'
-                print cmd
-                
-            elif c == 0x04:
-                cmd = '4?'
-                date = f.read(6)
-                print('[4] 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x ' % (ord(date[0]), ord(date[1]), ord(date[2]), ord(date[3]), ord(date[4]), ord(date[5])))
+                f_out.write(',,,,[3?]' + cmd + EOL)
+
+            elif c == 0x04:  # note
+                length = ord(f_in.read(1))
+                data = f_in.read(length)
+                f_out.write(',,,,' + data + EOL)
+
             else:
-                cmd = '?'
-                print cmd
+                f_out.write(',,,,[%d?]' % (c) + EOL)
             marker = 0
             continue
-            
+
         if marker == 0x55 and c == 0xaa:
             marker = 0x55aa
             continue
         else:
             marker = 0
-            
+
         if c == 0x55:
             marker = 0x55
             continue
-        
-        printData(data_type, c_str, size=1)
-        
-    f.close()
-    
+
+        value = printData(f_out, data_type, c_str, size=1)
+        if value != None:
+            f_out.write(value + EOL)
+
+    f_in.close()
+    f_out.close()
+
 def dumpData(data):
     for d in range(len(data)):
         print "0x%02x (%s)" % (ord(data[d]), data[d])
 
-def openDevice():
-    global port
-    port = serial.Serial("/dev/ttyUSB0", baudrate=115200, timeout=1.0)
+def openDevice(port=None, baudrate=115200):
+    global m_port
+
+    if port == None or port == '':
+        port = DEFAULT_PORT
+
+    try:
+        m_port = serial.Serial(port, baudrate=baudrate, timeout=1.0)
+    except serial.serialutil.SerialException:
+        print('No device found')
+        return -1
 
     clearPort()
-    checkDeviceType()
+    res = checkDeviceType()
+    return res
 
-    
-arg = handleArguments()
 
-if arg.parse == True:
-    parseDataFile(arg.data_file)
-    sys.exit(0)
-        
-openDevice()
+if __name__ == "__main__":
+    args = handleArguments()
 
-if arg.device_type == True:
-    print getDeviceType()
-    
-if arg.serial == True:
-    print getSerialNumber()
-    
-if arg.power_on == True:
-    setPower(True)
+    baudrate = DEFAULT_BAUDRATE
+    port = DEFAULT_PORT
+    bin_file = DEFAULT_BIN_FILE
+    output_file = DEFAULT_CSV_FILE
+    no_parse = False
 
-if arg.power_off == True:
-    setPower(False)
+    home = os.path.expanduser("~")
+    default_config = DEFAULT_CONFIG.replace('~', home)
+    if os.path.isfile(default_config):
+        exec (open(default_config).read())
 
-if arg.hearbeat0 == True:
-    print ''
-if arg.hearbeat1 == True:
-    print ''
-    
-if arg.voltage == True:
-    print getVoltage()
-    
-if arg.cpm == True:
-    print getCPM()
-    
-if arg.temperature == True:
-    print ''
-if arg.gyro == True:
-    print ''
-if arg.data != None:
-    getData(file=arg.data_file)
-    
-if arg.list_config == True:
-    print ''
-if arg.erase_config == True:
-    print ''
-if arg.write_config == True:
-    print ''
-if arg.update_config == True:
-    print ''
-if arg.set_time == True:
-    print ''
-if arg.set_date == True:
-    print ''
-if arg.send_key == True:
-    print ''
-if arg.firmware_update == True:
-    print ''
-if arg.reset == True:
-    print ''
-if arg.reboot == True:
-    print ''
+    if args.config != None and os.path.isfile(args.config):
+        exec (open(args.config).read())
+
+    if args.baudrate != '':
+        baudrate = args.baudrate
+    if args.port != '':
+        port = args.port
+    if args.bin_file != None and args.bin_file != '':
+        bin_file = args.bin_file
+    if args.no_parse != None:
+        no_parse = args.no_parse
+    if args.output_file != None:
+        output_file = args.output_file
+
+    if args.show_config == True:
+        print("baudrate    = %s" % (baudrate))
+        print("port        = '%s'" % (port))
+        print("bin_file    = '%s'" % (bin_file))
+        print("output_file = '%s'" % (output_file))
+        print("no_parse    = %s" % (no_parse))
+        sys.exit(0)
+
+    # handle all operations
+    if no_parse == True and args.data != True:
+        print("ERROR: the '--no-parse' option can only be used with the '--data' option.")
+        sys.exit(-1)
+
+    if args.bin_file != None:
+        parseDataFile(bin_file, output_file)
+        sys.exit(0)
+
+    res = openDevice(port=port, baudrate=baudrate)
+    if res != 0:
+        sys.exit(-res)
+
+    if args.data == True:
+        tmp_file = None
+        bin_output_file = ''
+        if no_parse == True:
+            if args.output_file != None:
+                bin_output_file = output_file
+            else:
+                bin_output_file = bin_file
+        else:
+            tmp_file = tempfile.mktemp('.bin')
+            bin_output_file = tmp_file
+
+        getData(out_file=bin_output_file)
+
+        if no_parse == False:
+            parseDataFile(bin_output_file, output_file)
+
+        if tmp_file != None and os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
+    elif args.device_info == True:
+        print getDeviceType()
+
+    elif args.serial == True:
+        print getSerialNumber()
+
+    elif args.power_on == True:
+        setPower(True)
+
+    elif args.power_off == True:
+        setPower(False)
+
+    elif args.hearbeat0 == True:
+        print 'option not yet available'
+    elif args.hearbeat1 == True:
+        print 'option not yet available'
+
+    elif args.voltage == True:
+        print getVoltage()
+
+    elif args.cpm == True:
+        print getCPM()
+
+    elif args.temperature == True:
+        print 'option not yet available'
+    elif args.gyro == True:
+        print 'option not yet available'
+    elif args.list_config == True:
+        print 'option not yet available'
+    elif args.erase_config == True:
+        print 'option not yet available'
+    elif args.write_config == True:
+        print 'option not yet available'
+    elif args.update_config == True:
+        print 'option not yet available'
+    elif args.set_time == True:
+        print 'option not yet available'
+    elif args.set_date == True:
+        print 'option not yet available'
+    elif args.send_key == True:
+        print 'option not yet available'
+    elif args.firmware_update == True:
+        print 'option not yet available'
+    elif args.reset == True:
+        print 'option not yet available'
+    elif args.reboot == True:
+        print 'option not yet available'
