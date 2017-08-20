@@ -35,6 +35,9 @@ DEFAULT_BAUDRATE = 115200
 DEFAULT_CPM_TO_SIEVERT = '1000,6.50'
 DEFAULT_OUTPUT_IN_CPM = False
 DEFAULT_NO_PARSE = False
+DEFAULT_SKIP_CHECK = False
+DEFAULT_DEVICE_TYPE = None
+DEFAULT_FLASH_SIZE = 0x00100000  # 1 MByte
 
 EOL = '\n'
 VERSION = '1.0.0'
@@ -62,6 +65,10 @@ def handleArguments():
                             help='don\'t log data in CPM or CPS but in micro Sieverts. optionally supply a tuple used as a conversion factor. e.g. \'1000,6.50\' indicates 1000 CPM equals 6.50 uSievert.')
     unit_group.add_argument('-M', '--output-in-cpm', action='store_true', default=None,
                             help='log data in CPM or CPS')
+    parser.add_argument('-K', '--skip-check', action='store_true', default=None,
+                        help="skip sanity/device checking on startup. the tool will use it's default settings, if needed use in combination with '--device-type' to overide these defaults (recommended)")
+    parser.add_argument('-Y', '--device-type', action='store', default='', nargs=1,
+                       help="don't use the autodetect feature to select the device-type, but use the one provided ('CMG-280', 'CMG-300', 'CMG-320' or 'CMG-500')")
     parser.add_argument('output_file', metavar='OUTPUT_FILE', nargs='?',
                         help='an output file')
 
@@ -120,14 +127,13 @@ def handleArguments():
     return parser.parse_args()
 
 FLASH_SIZE = {}
-FLASH_SIZE['default'] = 0x00100000  # 1 MBytew
 FLASH_SIZE['GMC-280'] = 0x00010000  # 64 kByte (?)
 FLASH_SIZE['GMC-300'] = 0x00010000  # 64 kByte
-FLASH_SIZE['GMC-320'] = 0x00100000  # 1 MBytew
-FLASH_SIZE['GMC-500'] = 0x00100000  # 1 MBytew
+FLASH_SIZE['GMC-320'] = 0x00100000  # 1 MByte
+FLASH_SIZE['GMC-500'] = 0x00100000  # 1 MByte
 
 m_deviceType = None
-m_deviceName = 'default'
+m_deviceName = DEFAULT_DEVICE_TYPE
 m_port = None
 
 def clearPort():
@@ -154,7 +160,7 @@ def checkDeviceType():
 
     elif m_deviceName[:3] == 'GMC':
         print("WARNING: device found (%s) but officially not supported, using defaults" % m_deviceType)
-        m_deviceName = 'default'
+        m_deviceName = DEFAULT_DEVICE_TYPE
 
     else:
         print("ERROR: device not found or supported")
@@ -220,7 +226,10 @@ def getData(address=0x000000, length=None, out_file=DEFAULT_BIN_FILE):
     if address == None:
         address = 0x000000
     if length == None:
-        length = FLASH_SIZE[m_deviceName]
+        if m_deviceName in FLASH_SIZE:
+            length = FLASH_SIZE[m_deviceName]
+        else:
+            length = DEFAULT_FLASH_SIZE
     if out_file == None or out_file == '':
         out_file = DEFAULT_BIN_FILE
 
@@ -371,10 +380,36 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
     f_in.close()
     f_out.close()
 
-def getHeartbeat(enable):
-    # "HEARTBEAT0"
-    # "HEARTBEAT1"
-    print 'option not yet available'
+def setHeartbeat(enable):
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    if enable == True:
+        m_port.write('<HEARTBEAT1>>')
+
+        try:
+            while True:
+                cpm = m_port.read(2)
+                if cpm == '':
+                    continue
+                value = struct.unpack(">H", cpm)[0] & 0x3fff
+                print value
+
+        except KeyboardInterrupt:
+            print("")
+        finally:
+            # make sure we stop the heartbeat
+            m_port.write('<HEARTBEAT0>>')
+
+    else:
+        m_port.write('<HEARTBEAT0>>')
+        while True:
+            x = m_port.read(1)
+            sys.stdout.write('.')
+            if x == '':
+                break
+        print("ok")
 
 def getTemperature():
     # "GETTEMP"
@@ -435,8 +470,8 @@ def dumpData(data):
     for d in range(len(data)):
         print "0x%02x (%s)" % (ord(data[d]), data[d])
 
-def openDevice(port=None, baudrate=115200):
-    global m_port
+def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None):
+    global m_port, m_deviceName
 
     if port == None or port == '':
         port = DEFAULT_PORT
@@ -448,7 +483,21 @@ def openDevice(port=None, baudrate=115200):
         return -1
 
     clearPort()
-    res = checkDeviceType()
+
+    res = 0
+    if skip_check == False:
+        res = checkDeviceType()
+
+    if device_type != None:
+        if device_type == 'GMC-280' or \
+           device_type == 'GMC-300' or \
+           device_type == 'GMC-320' or \
+           device_type == 'GMC-500':
+            m_deviceName = device_type
+            print("using device-type: %s" % m_deviceName)
+        else:
+            print("WARNING: unsupported selected device type '%s', defaulting to '%s'" % (device_type, m_deviceName))
+
     return res
 
 
@@ -462,6 +511,8 @@ if __name__ == "__main__":
     no_parse = DEFAULT_NO_PARSE
     output_in_usievert = DEFAULT_CPM_TO_SIEVERT
     output_in_cpm = DEFAULT_OUTPUT_IN_CPM
+    skip_check = DEFAULT_SKIP_CHECK
+    device_type = DEFAULT_DEVICE_TYPE
 
     home = os.path.expanduser("~")
     default_config = DEFAULT_CONFIG.replace('~', home)
@@ -485,6 +536,11 @@ if __name__ == "__main__":
         output_in_usievert = args.output_in_usievert
     if args.output_in_cpm != None:
         output_in_cpm = args.output_in_cpm
+    if args.skip_check != None:
+        skip_check = args.skip_check
+    if args.device_type != None and len(args.device_type) > 0:
+        device_type = args.device_type[0]
+
 
     if args.list_tool_config == True:
         print("baudrate           = %s" % (baudrate))
@@ -494,6 +550,11 @@ if __name__ == "__main__":
         print("no_parse           = %s" % (no_parse))
         print("output_in_usievert = '%s'" % (output_in_usievert))
         print("output_in_cpm      = %s" % (output_in_cpm))
+        print("skip_check         = %s" % (skip_check))
+        if device_type == None:
+            print("device_type        = None")
+        else:
+            print("device_type        = '%s'" % (device_type))
         sys.exit(0)
 
 
@@ -514,7 +575,7 @@ if __name__ == "__main__":
         parseDataFile(bin_file, output_file, cpm_to_usievert=cpm_to_usievert)
         sys.exit(0)
 
-    res = openDevice(port=port, baudrate=baudrate)
+    res = openDevice(port=port, baudrate=baudrate, skip_check=skip_check, device_type=device_type)
     if res != 0:
         sys.exit(-res)
 
