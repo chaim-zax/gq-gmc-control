@@ -74,9 +74,9 @@ def handleArguments():
                        help='powers on the device')
     command_group.add_argument('-O', '--power-off', action='store_true', default=None,
                        help='powers off the device')
-    command_group.add_argument('-h0', '--hearbeat0', action='store_true', default=None,
+    command_group.add_argument('-a', '--heartbeat-on', action='store_true', default=None,
                        help='')
-    command_group.add_argument('-h1', '--hearbeat1', action='store_true', default=None,
+    command_group.add_argument('-A', '--heartbeat-off', action='store_true', default=None,
                        help='')
     command_group.add_argument('-V', '--voltage', action='store_true', default=None,
                        help='get the current voltage of the battery (or power supply)')
@@ -102,6 +102,8 @@ def handleArguments():
                        help='set the local time')
     command_group.add_argument('-D', '--set-date', action='store', default=None,
                        help='set the local date')
+    command_group.add_argument('-E', '--get-date-and-time', action='store_true', default=None,
+                       help='get the local date and time')
     command_group.add_argument('-k', '--send-key', action='store', default=None,
                        help='emulate a keypress of the device')
     command_group.add_argument('-F', '--firmware-update', action='store', default=None,
@@ -117,27 +119,12 @@ def handleArguments():
 
     return parser.parse_args()
 
-# "GETCPM"
-# "GETCPS"
-# "GETCFG"
-# "ECFG"
-# "CFGUPDATE"
-# "HEARTBEAT1"
-# "HEARTBEAT0"
-# "WCFGAD"
-#
-# "SETDATEMM"...
-# "SETDATEDD"...
-# "SETDATEYY"...
-# "SETTIMEHH"...
-# "SETTIMEMM"...
-# "SETTIMESS"...
-# "KEY"...
-# "SPIR"...
-
 FLASH_SIZE = {}
-FLASH_SIZE['default'] = 0x00100000
-FLASH_SIZE['GMC-500'] = 0x00100000
+FLASH_SIZE['default'] = 0x00100000  # 1 MBytew
+FLASH_SIZE['GMC-280'] = 0x00010000  # 64 kByte (?)
+FLASH_SIZE['GMC-300'] = 0x00010000  # 64 kByte
+FLASH_SIZE['GMC-320'] = 0x00100000  # 1 MBytew
+FLASH_SIZE['GMC-500'] = 0x00100000  # 1 MBytew
 
 m_deviceType = None
 m_deviceName = 'default'
@@ -159,11 +146,18 @@ def checkDeviceType():
     m_deviceType = getDeviceType()
     m_deviceName = m_deviceType[:7]
 
-    if m_deviceName == 'GMC-500':
+    if m_deviceName == 'GMC-280' or \
+       m_deviceName == 'GMC-300' or \
+       m_deviceName == 'GMC-320' or \
+       m_deviceName == 'GMC-500':
         print("device found: %s" % m_deviceType)
 
+    elif m_deviceName[:3] == 'GMC':
+        print("WARNING: device found (%s) but officially not supported, using defaults" % m_deviceType)
+        m_deviceName = 'default'
+
     else:
-        print("device '%s' not supported" % m_deviceType)
+        print("ERROR: device not found or supported")
         return -1
 
     return 0
@@ -195,9 +189,9 @@ def setPower(on=True):
         return -1
 
     if on:
-        m_port.write('<' + TURN_ON_PWR_CMD + '>>')
+        m_port.write('<POWERON>>')
     else:
-        m_port.write('<' + TURN_OFF_PWR_CMD + '>>')
+        m_port.write('<POWEROFF>>')
 
 def getVoltage():
     if m_port == None:
@@ -351,6 +345,7 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
             marker = 0
             continue
 
+        # TODO: handle scenario with 0x55 but not followed by 0xaa, or 0x55 and 0xaa are data points (how?)
         if marker == 0x55 and c == 0xaa:
             marker = 0x55aa
             continue
@@ -375,6 +370,66 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
 
     f_in.close()
     f_out.close()
+
+def getHeartbeat(enable):
+    # "HEARTBEAT0"
+    # "HEARTBEAT1"
+    print 'option not yet available'
+
+def getTemperature():
+    # "GETTEMP"
+    print 'option not yet available'
+
+def getGyro():
+    # "GETGYRO"
+    print 'option not yet available'
+
+def listConfig():
+    # "GETCFG"
+    print 'option not yet available'
+
+def eraseConfig():
+    # "ECFG"
+    print 'option not yet available'
+
+def writeConfig():
+    # "WCFG[A0][D0]"
+    print 'option not yet available'
+
+def updateConfig():
+    # "CFGUPDATE"
+    print 'option not yet available'
+
+def setTime():
+    # "SETTIMEHH"...
+    # "SETTIMEMM"...
+    # "SETTIMESS"...
+    print 'option not yet available'
+
+def getDateAndTime():
+    # "GETDATETIME"
+    print 'option not yet available'
+
+def setDate():
+    # "SETDATEMM"...
+    # "SETDATEDD"...
+    # "SETDATEYY"...
+    print 'option not yet available'
+
+def sendKey():
+    # "KEY"...
+    print 'option not yet available'
+
+def firmwareUpdate():
+    print 'option not yet available'
+
+def factoryReset():
+    # "FACTORYRESET"
+    print 'option not yet available'
+
+def reboot():
+    # "REBOOT"
+    print 'option not yet available'
 
 def dumpData(data):
     for d in range(len(data)):
@@ -495,10 +550,11 @@ if __name__ == "__main__":
     elif args.power_off == True:
         setPower(False)
 
-    elif args.hearbeat0 == True:
-        print 'option not yet available'
-    elif args.hearbeat1 == True:
-        print 'option not yet available'
+    elif args.heartbeat_on == True:
+        setHeartbeat(True)
+
+    elif args.heartbeat_off == True:
+        setHeartbeat(False)
 
     elif args.voltage == True:
         print getVoltage()
@@ -507,26 +563,40 @@ if __name__ == "__main__":
         print getCPM()
 
     elif args.temperature == True:
-        print 'option not yet available'
+        print getTemperature()
+
     elif args.gyro == True:
-        print 'option not yet available'
+        print getGyro()
+
     elif args.list_config == True:
-        print 'option not yet available'
+        listConfig()
+
     elif args.erase_config == True:
-        print 'option not yet available'
+        eraseConfig()
+
     elif args.write_config == True:
-        print 'option not yet available'
+        writeConfig()
+
     elif args.update_config == True:
-        print 'option not yet available'
+        updateConfig()
+
+    elif args.get_date_and_time == True:
+        print getDateAndTime()
+
     elif args.set_time == True:
-        print 'option not yet available'
+        setTime()
+
     elif args.set_date == True:
-        print 'option not yet available'
+        setDate()
+
     elif args.send_key == True:
-        print 'option not yet available'
+        sendKey()
+
     elif args.firmware_update == True:
-        print 'option not yet available'
+        firmwareUpdate()
+
     elif args.reset == True:
-        print 'option not yet available'
+        factoryReset()
+
     elif args.reboot == True:
-        print 'option not yet available'
+        reboot()
