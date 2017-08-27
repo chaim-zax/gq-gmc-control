@@ -522,11 +522,11 @@ def writeConfig(parameters):
             struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE1_CPM, int(par_value[1]))
         elif par_value[0] == 'cal1-sv':
             struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE1_SV, float(par_value[1]))
-        if par_value[0] == 'cal2-cpm':
+        elif par_value[0] == 'cal2-cpm':
             struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE2_CPM, int(par_value[1]))
         elif par_value[0] == 'cal2-sv':
             struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE2_SV, float(par_value[1]))
-        if par_value[0] == 'cal3-cpm':
+        elif par_value[0] == 'cal3-cpm':
             struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE3_CPM, int(par_value[1]))
         elif par_value[0] == 'cal3-sv':
             struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE3_SV, float(par_value[1]))
@@ -755,14 +755,8 @@ if __name__ == "__main__":
     elif args.list_config == True:
         listConfig()
 
-    elif args.erase_config == True:
-        eraseConfig()
-
     elif args.write_config != None:
         writeConfig(args.write_config)
-
-    elif args.update_config == True:
-        updateConfig()
 
     elif args.get_date_and_time == True:
         print getDateAndTime()
