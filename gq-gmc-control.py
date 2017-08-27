@@ -23,6 +23,7 @@ import argparse
 import struct
 import platform
 import tempfile
+import ctypes
 
 DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
@@ -38,9 +39,41 @@ DEFAULT_NO_PARSE = False
 DEFAULT_SKIP_CHECK = False
 DEFAULT_DEVICE_TYPE = None
 DEFAULT_FLASH_SIZE = 0x00100000  # 1 MByte
+DEFAULT_CONFIGUATION_SIZE = 0x100 # 256 byte
 
 EOL = '\n'
 VERSION = '1.0.0'
+
+ADDRESS_WIFI_ON_OFF = 0x00
+ADDRESS_WIFI_SSID = 0x45
+ADDRESS_WIFI_PASSWORD = 0x65
+ADDRESS_SERVER_WEBSITE = 0x85
+ADDRESS_SERVER_URL = 0xa5
+ADDRESS_USER_ID = 0xc5
+ADDRESS_COUNTER_ID = 0xe5
+ADDRESS_CALIBRATE1_CPM = 0x08
+ADDRESS_CALIBRATE1_SV = 0x0a
+ADDRESS_CALIBRATE2_CPM = 0x0e
+ADDRESS_CALIBRATE2_SV = 0x10
+ADDRESS_CALIBRATE3_CPM = 0x14
+ADDRESS_CALIBRATE3_SV = 0x16
+
+FLASH_SIZE = {}
+FLASH_SIZE['GMC-280'] = 0x00010000  # 64 kByte (?)
+FLASH_SIZE['GMC-300'] = 0x00010000  # 64 kByte
+FLASH_SIZE['GMC-320'] = 0x00100000  # 1 MByte
+FLASH_SIZE['GMC-500'] = 0x00100000  # 1 MByte
+
+CONFIGUATION_BUFFER_SIZE = {}
+CONFIGUATION_BUFFER_SIZE['GMC-280'] = 0x100
+CONFIGUATION_BUFFER_SIZE['GMC-300'] = 0x100
+CONFIGUATION_BUFFER_SIZE['GMC-320'] = 0x100
+CONFIGUATION_BUFFER_SIZE['GMC-500'] = 0x200
+
+m_deviceType = None
+m_deviceName = DEFAULT_DEVICE_TYPE
+m_port = None
+m_configData = None
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Control tool for the GQ GMC-500 series.',
@@ -99,12 +132,8 @@ def handleArguments():
                        help='do not download history data, only parse the already downloaded data to a csv file (default \'%s\'). can be used in combination with the \'--data\' option to create a csv file with a different file-name' % (DEFAULT_CSV_FILE))
     command_group.add_argument('-l', '--list-config', action='store_true', default=None,
                        help='shows the current device configuration')
-    command_group.add_argument('-e', '--erase-config', action='store_true', default=None,
-                       help='erase the current device configuration')
-    command_group.add_argument('-w', '--write-config', action='store_true', default=None,
-                       help='write the device configuration')
-    command_group.add_argument('-u', '--update-config', action='store_true', default=None,
-                       help='update the current device configuration')
+    command_group.add_argument('-w', '--write-config', action='store', default=None, nargs='+', metavar='PARAMETER=VALUE', dest='write_config',
+                       help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated).")
     command_group.add_argument('-t', '--set-time', action='store', default=None,
                        help='set the local time')
     command_group.add_argument('-D', '--set-date', action='store', default=None,
@@ -125,16 +154,6 @@ def handleArguments():
     command_group.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION)
 
     return parser.parse_args()
-
-FLASH_SIZE = {}
-FLASH_SIZE['GMC-280'] = 0x00010000  # 64 kByte (?)
-FLASH_SIZE['GMC-300'] = 0x00010000  # 64 kByte
-FLASH_SIZE['GMC-320'] = 0x00100000  # 1 MByte
-FLASH_SIZE['GMC-500'] = 0x00100000  # 1 MByte
-
-m_deviceType = None
-m_deviceName = DEFAULT_DEVICE_TYPE
-m_port = None
 
 def clearPort():
     # close any pending previous command
@@ -412,28 +431,132 @@ def setHeartbeat(enable):
         print("ok")
 
 def getTemperature():
-    # "GETTEMP"
-    print 'option not yet available'
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETTEMP>>')
+    temp = m_port.read(4)
+    sign = ''
+    if ord(temp[2]) != 0:
+        sign = '-'
+    return "%s%d.%d" % (sign, ord(temp[0]), ord(temp[1]))
 
 def getGyro():
-    # "GETGYRO"
-    print 'option not yet available'
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<GETGYRO>>')
+    gyro = m_port.read(7)
+    (x, y, z, dummy) = struct.unpack(">hhhB", gyro)
+    return "x:%d, y:%d, z:%d" % (x, y, z)
+
+def getConfig():
+    global m_configData
+
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    if m_deviceName in CONFIGUATION_BUFFER_SIZE:
+        size = CONFIGUATION_BUFFER_SIZE[m_deviceName]
+    else:
+        size = DEFAULT_CONFIGUATION_SIZE
+
+    m_port.write('<GETCFG>>')
+    data = m_port.read(size)
+    m_configData = ctypes.create_string_buffer(data)
 
 def listConfig():
-    # "GETCFG"
-    print 'option not yet available'
+    # make sure the cached config is up to date
+    if m_configData == None:
+        getConfig()
 
-def eraseConfig():
-    # "ECFG"
-    print 'option not yet available'
+    dumpData(m_configData)
 
-def writeConfig():
-    # "WCFG[A0][D0]"
-    print 'option not yet available'
+    print("server website: %s" % m_configData[ADDRESS_SERVER_WEBSITE:ADDRESS_SERVER_WEBSITE+32])
+    print("server url: %s" % m_configData[ADDRESS_SERVER_URL:ADDRESS_SERVER_URL+32])
+    print("user id: %s" % m_configData[ADDRESS_USER_ID:ADDRESS_USER_ID+16])
+    print("counter id: %s" % m_configData[ADDRESS_COUNTER_ID:ADDRESS_COUNTER_ID+16])
+    if ord(m_configData[ADDRESS_WIFI_ON_OFF]) == 255:
+        print("wifi: on")
+    else:
+        print("wifi: off")
+    print("wifi ssid: %s" % m_configData[ADDRESS_WIFI_SSID:ADDRESS_WIFI_SSID+16])
+    print("wifi password: %s" % m_configData[ADDRESS_WIFI_PASSWORD:ADDRESS_WIFI_PASSWORD+16])
+    cal1_cpm = ord(m_configData[ADDRESS_CALIBRATE1_CPM]) * 256 + ord(m_configData[ADDRESS_CALIBRATE1_CPM+1])
+    cal1_sv = struct.unpack(">f", m_configData[ADDRESS_CALIBRATE1_SV:ADDRESS_CALIBRATE1_SV+4])[0]
+    print("calibrate 1: %d cpm = %.2f sv" % (cal1_cpm, cal1_sv))
+    cal2_cpm = ord(m_configData[ADDRESS_CALIBRATE2_CPM]) * 256 + ord(m_configData[ADDRESS_CALIBRATE2_CPM+1])
+    cal2_sv = struct.unpack(">f", m_configData[ADDRESS_CALIBRATE2_SV:ADDRESS_CALIBRATE2_SV+4])[0]
+    print("calibrate 2: %d cpm = %.2f sv" % (cal2_cpm, cal2_sv))
+    cal3_cpm = ord(m_configData[ADDRESS_CALIBRATE3_CPM]) * 256 + ord(m_configData[ADDRESS_CALIBRATE3_CPM+1])
+    cal3_sv = struct.unpack(">f", m_configData[ADDRESS_CALIBRATE3_SV:ADDRESS_CALIBRATE3_SV+4])[0]
+    print("calibrate 3: %d cpm = %.2f sv" % (cal3_cpm, cal3_sv))
 
-def updateConfig():
-    # "CFGUPDATE"
-    print 'option not yet available'
+def writeConfig(parameters):
+    global m_configData
+
+    if m_deviceName == 'GMC-280' or \
+       m_deviceName == 'GMC-300' or \
+       m_deviceName == 'GMC-320':
+        address_size = 'B'
+    elif m_deviceName == 'GMC-500':
+        address_size = 'H'
+    else:
+        print('ERROR: device not supported, feature not available')
+        return
+
+    # make sure the cached config is up to date
+    if m_configData == None:
+        getConfig()
+
+    for par in parameters:
+        par_value = par.split('=')
+        if len(par_value) != 2:
+            print("WARNING: skipping parameter '%s', it doesn't seem to contain a parametername:value pair." % par)
+            continue
+
+        if par_value[0] == 'cal1-cpm':
+            struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE1_CPM, int(par_value[1]))
+        elif par_value[0] == 'cal1-sv':
+            struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE1_SV, float(par_value[1]))
+        if par_value[0] == 'cal2-cpm':
+            struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE2_CPM, int(par_value[1]))
+        elif par_value[0] == 'cal2-sv':
+            struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE2_SV, float(par_value[1]))
+        if par_value[0] == 'cal3-cpm':
+            struct.pack_into('>H', m_configData, ADDRESS_CALIBRATE3_CPM, int(par_value[1]))
+        elif par_value[0] == 'cal3-sv':
+            struct.pack_into('>f', m_configData, ADDRESS_CALIBRATE3_SV, float(par_value[1]))
+
+        else:
+            print("WARNING: parameter with name '%s' not supported" % par_value[0])
+
+    m_port.write('<ECFG>>')
+    ret = m_port.read(1)
+    if ord(ret) != 0xaa:
+        print("WARNING: erase operation failed, parameters not stored on device")
+        return
+
+    if m_deviceName in CONFIGUATION_BUFFER_SIZE:
+        size = CONFIGUATION_BUFFER_SIZE[m_deviceName]
+    else:
+        size = DEFAULT_CONFIGUATION_SIZE
+
+    for i in range(size):
+        cmd = struct.pack('>' + address_size + 'B', i, ord(m_configData[i]))
+        m_port.write('<WCFG' + cmd + '>>')
+        ret = m_port.read(1)
+        if ret == '' or ord(ret) != 0xaa:
+            print("WARNING: write operation failed at address 0x%02X, (some) parameters not stored to device" % i)
+
+    m_port.write('<CFGUPDATE>>')
+    ret = m_port.read(1)
+    if ord(ret) != 0xaa:
+        print("WARNING: update operation failed, parameters not stored on device")
+        return
 
 def setTime():
     # "SETTIMEHH"...
@@ -468,7 +591,7 @@ def reboot():
 
 def dumpData(data):
     for d in range(len(data)):
-        print "0x%02x (%s)" % (ord(data[d]), data[d])
+        print "0x%02x 0x%02x (%s)" % (d, ord(data[d]), data[d])
 
 def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None):
     global m_port, m_deviceName
@@ -635,8 +758,8 @@ if __name__ == "__main__":
     elif args.erase_config == True:
         eraseConfig()
 
-    elif args.write_config == True:
-        writeConfig()
+    elif args.write_config != None:
+        writeConfig(args.write_config)
 
     elif args.update_config == True:
         updateConfig()
