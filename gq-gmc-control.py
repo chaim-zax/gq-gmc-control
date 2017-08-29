@@ -24,6 +24,7 @@ import struct
 import platform
 import tempfile
 import ctypes
+import datetime
 
 DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
@@ -76,7 +77,7 @@ m_port = None
 m_configData = None
 
 def handleArguments():
-    parser = argparse.ArgumentParser(description='Control tool for the GQ GMC-500 series.',
+    parser = argparse.ArgumentParser(description='Control tool for the GQ GMC Geiger Counters. This tool provices a convenient command line user interface to most of the device features (which are accessable by usb). Currently the GMC-280, GMC-300, GMC-320 and GMC-500 models are supported.',
                                      epilog="Copyright (c) 2017, Chaim Zax <chaim.zax@gmail.com>")
     unit_group = parser.add_mutually_exclusive_group()
     group = parser.add_argument_group(title='commands', description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
@@ -133,14 +134,13 @@ def handleArguments():
     command_group.add_argument('-l', '--list-config', action='store_true', default=None,
                        help='shows the current device configuration')
     command_group.add_argument('-w', '--write-config', action='store', default=None, nargs='+', metavar='PARAMETER=VALUE', dest='write_config',
-                       help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated).")
-    command_group.add_argument('-t', '--set-time', action='store', default=None,
-                       help='set the local time')
-    command_group.add_argument('-D', '--set-date', action='store', default=None,
-                       help='set the local date')
-    command_group.add_argument('-E', '--get-date-and-time', action='store_true', default=None,
+                       help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated). note: this feature is only tested on a GQ GMC-500.")
+    command_group.add_argument('-E', '--set-date-and-time', action='store', default=None, type=validDateTime, metavar="\"yyyy-mm-dd HH:MM:SS\"",
+                       help='set the local date and time')
+    command_group.add_argument('-e', '--get-date-and-time', action='store_true', default=None,
                        help='get the local date and time')
     command_group.add_argument('-k', '--send-key', action='store', default=None,
+                       choices=['S1', 'S2', 'S3', 'S4'],
                        help='emulate a keypress of the device')
     command_group.add_argument('-F', '--firmware-update', action='store', default=None,
                        help='update the firmware of the device')
@@ -154,6 +154,13 @@ def handleArguments():
     command_group.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION)
 
     return parser.parse_args()
+
+def validDateTime(s):
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        msg = "Not a valid date: '{0}'.".format(s)
+        raise argparse.ArgumentTypeError(msg)
 
 def clearPort():
     # close any pending previous command
@@ -565,29 +572,69 @@ def setTime():
     print 'option not yet available'
 
 def getDateAndTime():
-    # "GETDATETIME"
-    print 'option not yet available'
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
 
-def setDate():
-    # "SETDATEMM"...
-    # "SETDATEDD"...
-    # "SETDATEYY"...
-    print 'option not yet available'
+    m_port.write('<GETDATETIME>>')
 
-def sendKey():
-    # "KEY"...
-    print 'option not yet available'
+    date = m_port.read(7)
+    (year, month, day, hour, minute, second, dummy) = struct.unpack(">BBBBBBB", date)
+    return "%d/%d/%d %d:%d:%d" % (year, month, day, hour, minute, second)
+
+def setDateAndTime(date_time):
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    cmd = struct.pack('>BBBBBB', date_time.year - 2000, date_time.month, date_time.day, date_time.hour, date_time.minute, date_time.second)
+    m_port.write('<SETDATETIME' + cmd + '>>')
+
+    for loop in range(10):
+      ret = m_port.read(1)
+      if ret != '':
+          break
+
+    if ret == '' or ord(ret) != 0xaa:
+       print("WARNING: setting date and time not succeded")
+
+def sendKey(key):
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    if key.lower() == 's1':
+        m_port.write('<KEY0>>')
+
+    elif key.lower() == 's2':
+        m_port.write('<KEY1>>')
+
+    elif key.lower() == 's3':
+        m_port.write('<KEY2>>')
+
+    elif key.lower() == 's4':
+        m_port.write('<KEY3>>')
 
 def firmwareUpdate():
     print 'option not yet available'
 
 def factoryReset():
-    # "FACTORYRESET"
-    print 'option not yet available'
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<FACTORYRESET>>')
+
+    ret = m_port.read(1)
+    if ord(ret) != 0xaa:
+        print("WARNING: factory reset not succeded")
 
 def reboot():
-    # "REBOOT"
-    print 'option not yet available'
+    if m_port == None:
+        print('ERROR: no device connected')
+        return -1
+
+    m_port.write('<REBOOT>>')
 
 def dumpData(data):
     for d in range(len(data)):
@@ -761,14 +808,11 @@ if __name__ == "__main__":
     elif args.get_date_and_time == True:
         print getDateAndTime()
 
-    elif args.set_time == True:
-        setTime()
+    elif args.set_date_and_time != None:
+        setDateAndTime(args.set_date_and_time)
 
-    elif args.set_date == True:
-        setDate()
-
-    elif args.send_key == True:
-        sendKey()
+    elif args.send_key != None:
+        sendKey(args.send_key)
 
     elif args.firmware_update == True:
         firmwareUpdate()
