@@ -84,88 +84,99 @@ def handleArguments():
     parser = argparse.ArgumentParser(description='Control tool for the GQ GMC Geiger Counters. This tool provices a convenient command line user interface to most of the device features (which are accessable by usb). Currently the GMC-280, GMC-300, GMC-320 and GMC-500 models are supported.',
                                      epilog="Copyright (c) 2017, Chaim Zax <chaim.zax@gmail.com>")
     unit_group = parser.add_mutually_exclusive_group()
-    group = parser.add_argument_group(title='commands', description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
+    group = parser.add_argument_group(title='commands',
+                                      description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
     command_group = group.add_mutually_exclusive_group(required=True)
 
     # device settings
-    parser.add_argument('-b', '--baudrate', action='store', default=DEFAULT_BAUDRATE, type=int,
-                       help='set the baudrate of the serial port (default %d)' % (DEFAULT_BAUDRATE))
+    parser.add_argument('-b', '--baudrate', action='store', default=DEFAULT_BAUDRATE,
+                        type=int,
+                        help='set the baudrate of the serial port (default %d)' % (DEFAULT_BAUDRATE))
     parser.add_argument('-p', '--port', action='store', default='',
-                       help='set the serial port (default \'%s\')' % (DEFAULT_PORT))
+                        help='set the serial port (default \'%s\')' % (DEFAULT_PORT))
     # command line configuration
     parser.add_argument('-n', '--no-parse', action='store_true', default=None,
-                       help='do not parse the history data into a csv file, only store the binary data. use only in combination with the \'--data\' command option.')
+                        help='do not parse the history data into a csv file, only store the binary data. use only in combination with the \'--data\' command option.')
     parser.add_argument('-c', '--config', action='store', default=None,
-                       help='load command line options from a configuration file')
+                        help='load command line options from a configuration file')
     #unit_group.add_argument('-S', '--output-in-sievert', metavar='CPM,Sievert', nargs='?',
     #                    help='don\'t log data in CPM or CPS but in micro Sieverts. optionally supply a tuple used as a conversion factor. e.g. \'1000,0.0000065\' indicates 1000 CPM equals 6.50 uSievert.')
-    unit_group.add_argument('-S', '--output-in-usievert', metavar='CPM,uSievert', nargs='?', dest='output_in_usievert', const='',
-                            help='don\'t log data in CPM or CPS but in micro Sieverts. optionally supply a tuple used as a conversion factor. e.g. \'1000,6.50\' indicates 1000 CPM equals 6.50 uSievert.')
+    unit_group.add_argument('-S', '--output-in-usievert', metavar='CPM,uSievert',
+                            nargs='?', dest='output_in_usievert', const='',
+                            help='don\'t log data in CPM or CPS but in micro Sievert/h. optionally supply a tuple used as a conversion factor. e.g. \'1000,6.50\' indicates 1000 CPM equals 6.50 uSievert/h.')
     unit_group.add_argument('-M', '--output-in-cpm', action='store_true', default=None,
                             help='log data in CPM or CPS')
     parser.add_argument('-K', '--skip-check', action='store_true', default=None,
-                        help="skip sanity/device checking on startup. the tool will use it's default settings, if needed use in combination with '--device-type' to overide these defaults (recommended)")
+                        help="skip sanity/device checking on startup. the tool will use it's default settings, if needed use in combination with '--device-type' to overide these defaults (recommended when skipping device checking)")
     parser.add_argument('-Y', '--device-type', action='store', default='', nargs=1,
-                       help="don't use the autodetect feature to select the device-type, but use the one provided ('CMG-280', 'CMG-300', 'CMG-320' or 'CMG-500')")
+                        help="don't use the autodetect feature to select the device-type, but use the one provided ('CMG-280', 'CMG-300', 'CMG-320' or 'CMG-500')")
     parser.add_argument('output_file', metavar='OUTPUT_FILE', nargs='?',
                         help='an output file')
-    parser.add_argument('-u', '--unit-conversion-from-device', action='store_true', default=None,
+    parser.add_argument('-u', '--unit-conversion-from-device', action='store_true',
+                        default=None,
                         help="use the CPM to Sievert calibration values from the device to convert data to uSieverts.")
-    parser.add_argument('-B', '--verbose', action='store', default=None, type=int, choices=[1,2],
+    parser.add_argument('-B', '--verbose', action='store', default=None, type=int,
+                        choices=[1,2],
                         help="in- or decrease verbosity")
 
     # device operations
     command_group.add_argument('-i', '--device-info', action='store_true', default=None,
-                       help='get the device type and revision')
+                               help='get the device type and revision')
     command_group.add_argument('-s', '--serial', action='store_true', default=None,
-                       help='get the serial number of the device')
+                               help='get the serial number of the device')
     command_group.add_argument('-o', '--power-on', action='store_true', default=None,
-                       help='powers on the device')
+                               help='powers on the device')
     command_group.add_argument('-O', '--power-off', action='store_true', default=None,
-                       help='powers off the device')
-    command_group.add_argument('-a', '--heartbeat-on', action='store_true', default=None,
-                       help='')
+                               help='powers off the device')
+    command_group.add_argument('-a', '--heartbeat', action='store_true', default=None,
+                               help='prints every second the CPS (or uSv/h) value until CTRL-C is pressed')
     command_group.add_argument('-A', '--heartbeat-off', action='store_true', default=None,
-                       help='')
+                               help="disable the heartbeat (should normally not be needed when using the '--heartbeat' command)")
     command_group.add_argument('-V', '--voltage', action='store_true', default=None,
-                       help='get the current voltage of the battery (or power supply)')
+                               help='get the current voltage of the battery (or power supply)')
     command_group.add_argument('-C', '--cpm', action='store_true', default=None,
-                       help='get the current CPM')
+                               help='get the current CPM (or uSv/h). can be used in combination with the \'--output-in-usievert\',  \'--unit-conversion-from-device\' and/or \'--output-in-cpm\' options')
     command_group.add_argument('-T', '--temperature', action='store_true', default=None,
-                       help='get the current temperature')
+                               help='get the current temperature')
     command_group.add_argument('-G', '--gyro', action='store_true', default=None,
-                       help='get the current gyroscopic data')
+                               help='get the current gyroscopic data')
     command_group.add_argument('-d', '--data', action='store_true', default=None,
-                       help='download all history data and store it to file (default \'%s\' or \'%s\'). can be used in combination with the \'--no-parse\' option' % (DEFAULT_CSV_FILE, DEFAULT_BIN_FILE))
-    command_group.add_argument('-P', '--only-parse', nargs='?', type=str, dest='bin_file', const='',
-                       help='do not download history data, only parse the already downloaded data to a csv file (default \'%s\'). can be used in combination with the \'--data\' option to create a csv file with a different file-name' % (DEFAULT_CSV_FILE))
+                               help='download all history data and store it to file (default \'%s\' or \'%s\'). can be used in combination with the \'--no-parse\', \'--output-in-usievert\',  \'--unit-conversion-from-device\' and/or \'--output-in-cpm\' options' % (DEFAULT_CSV_FILE, DEFAULT_BIN_FILE))
+    command_group.add_argument('-P', '--only-parse', nargs='?', type=str, dest='bin_file',
+                               const='',
+                               help='do not download history data, only parse the already downloaded data to a csv file (default \'%s\'). can be used in combination with the \'--data\' option to create a csv file with a different file-name, and the \'--output-in-usievert\',  \'--unit-conversion-from-device\' and/or \'--output-in-cpm\' options' % (DEFAULT_CSV_FILE))
     command_group.add_argument('-l', '--list-config', action='store_true', default=None,
-                       help='shows the current device configuration')
-    command_group.add_argument('-w', '--write-config', action='store', default=None, nargs='+', metavar='PARAMETER=VALUE', dest='write_config',
-                       help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated). note: this feature is only tested on a GQ GMC-500.")
-    command_group.add_argument('-E', '--set-date-and-time', action='store', default=None, type=validDateTime, metavar="\"yyyy-mm-dd HH:MM:SS\"",
-                       help='set the local date and time')
-    command_group.add_argument('-e', '--get-date-and-time', action='store_true', default=None,
-                       help='get the local date and time')
+                               help='shows the current device configuration')
+    command_group.add_argument('-w', '--write-config', action='store', default=None,
+                               nargs='+', metavar='PARAMETER=VALUE', dest='write_config',
+                               help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated). note: this feature is only tested on a GQ GMC-500.")
+    command_group.add_argument('-E', '--set-date-and-time', action='store', default=None,
+                               type=validDateTime, metavar='"yy/mm/dd HH:MM:SS"',
+                               help='set the local date and time')
+    command_group.add_argument('-e', '--get-date-and-time', action='store_true',
+                               default=None,
+                               help='get the local date and time')
     command_group.add_argument('-k', '--send-key', action='store', default=None,
-                       choices=['S1', 'S2', 'S3', 'S4'],
-                       help='emulate a keypress of the device')
+                               choices=['S1', 'S2', 'S3', 'S4'],
+                               help='emulate a keypress of the device')
     command_group.add_argument('-F', '--firmware-update', action='store', default=None,
-                       help='update the firmware of the device (NOT IMPLEMENTED)')
+                               help='update the firmware of the device (NOT IMPLEMENTED)')
     command_group.add_argument('-R', '--reset', action='store_true', default=None,
-                       help='reset the device to the default factory settings')
+                               help='reset the device to the default factory settings')
     command_group.add_argument('-r', '--reboot', action='store_true', default=None,
-                       help='reboot the device')
+                               help='reboot the device')
 
-    command_group.add_argument('-L', '--list-tool-config', action='store_true', default=None,
-                       help='shows the currently used command line configuration options')
-    command_group.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION)
+    command_group.add_argument('-L', '--list-tool-config', action='store_true',
+                               default=None,
+                               help='shows the currently used command line configuration options')
+    command_group.add_argument('-v', '--version', action='version',
+                               version='%(prog)s v' + VERSION)
 
     return parser.parse_args()
 
 def validDateTime(s):
     try:
-        return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.strptime(s, "%y/%m/%d %H:%M:%S")
     except ValueError:
         msg = "Not a valid date: '{0}'.".format(s)
         raise argparse.ArgumentTypeError(msg)
@@ -294,6 +305,9 @@ def getData(address=0x000000, length=None, out_file=DEFAULT_BIN_FILE):
     sub_addr = address
     sub_len = 4096
 
+    # make sure we don't have any data in the device buffer
+    clearPort()
+
     if m_verbose == 1:
         print("storing data to '" + out_file + "'")
     f_out = open(out_file, 'w')
@@ -338,10 +352,10 @@ def getUnitConversionFromDevice():
     cal_sv = (cal1_sv + cal2_sv + cal3_sv) / 3
 
     if m_verbose == 2:
-        print("calibration value 1 from device: %d cpm = %.2f uSievert" % (m_config['cal1_cpm'], m_config['cal1_sv']))
-        print("calibration value 2 from device: %d cpm = %.2f uSievert" % (m_config['cal2_cpm'], m_config['cal2_sv']))
-        print("calibration value 3 from device: %d cpm = %.2f uSievert" % (m_config['cal3_cpm'], m_config['cal3_sv']))
-        print("using the average of calibration values: %d cpm = %.2f uSievert" % (1000, cal_sv))
+        print("calibration value 1 from device: %d CPM = %.2f uSievert/h" % (m_config['cal1_cpm'], m_config['cal1_sv']))
+        print("calibration value 2 from device: %d CPM = %.2f uSievert/h" % (m_config['cal2_cpm'], m_config['cal2_sv']))
+        print("calibration value 3 from device: %d CPM = %.2f uSievert/h" % (m_config['cal3_cpm'], m_config['cal3_sv']))
+        print("using the average of calibration values: %d CPM = %.2f uSievert/h" % (1000, cal_sv))
 
     return (1000, cal_sv)
 
@@ -371,7 +385,7 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
         print("parsing file '" + in_file + "', and storing data to '" + out_file + "'")
 
     marker = 0
-    #eof_count = 0
+    eof_count = 0
     data_type = '*'
     f_in = open(in_file, 'r')
     f_out = open(out_file, 'w')
@@ -381,7 +395,9 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
             break
         c = ord(c_str)
 
+        # handle commands and large values
         if marker == 0x55aa:
+            # command: set count type
             if c == 0x00:
                 date = f_in.read(9)
 
@@ -406,38 +422,53 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
                     mode_str = 'every minute - threshold'
 
                 f_out.write(',,20%02d/%02d/%02d %02d:%02d:%02d,%s' % (ord(date[0]), ord(date[1]), ord(date[2]), ord(date[3]), ord(date[4]), ord(date[5]), mode_str) + EOL)
+
+            # command: two byte value (large numbers)
             elif c == 0x01:
                 data = f_in.read(2)
                 value = printData(f_out, data_type, data, size=2, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
+            # command: three byte value (very large numbers)
             elif c == 0x02:
                 data = f_in.read(3)
                 value = printData(f_out, data_type, data, size=3, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
+            # command: four byte value (huge numbers)
             elif c == 0x03:  # TODO: test me ;)
                 data = f_in.read(4)
                 value = printData(f_out, data_type, data, size=4, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
-            elif c == 0x04:  # note
+            # command: note
+            elif c == 0x04:
                 length = ord(f_in.read(1))
                 data = f_in.read(length)
                 f_out.write(',,,,' + data + EOL)
 
+            # command: unknown/unsupported
             else:
                 f_out.write(',,,,[%d?]' % (c) + EOL)
+
             marker = 0
+            # end of command
             continue
 
-        # TODO: handle scenario with 0x55 but not followed by 0xaa, or 0x55 and 0xaa are data points (how?)
-        if marker == 0x55 and c == 0xaa:
-            marker = 0x55aa
-            continue
+        if marker == 0x55:
+            # command detected
+            if c == 0xaa:
+                marker = 0x55aa
+                # handle command in the next loop
+                continue
+            else:
+                # possible command turns out to be a regular value
+                f_out.write(printData(f_out, data_type, chr(0x55), size=1, cpm_to_usievert=cpm_to_usievert) + EOL)
+                marker = 0
         else:
             marker = 0
 
+        # possible command detected (but it still could be a regular value)
         if c == 0x55:
             marker = 0x55
             continue
@@ -446,18 +477,19 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
         if value != None:
             f_out.write(value + EOL)
 
-        # detect end of file
-        #if ord(c_str[0]) == 0xff:
-        #    eof_count += 1
-        #    if eof_count == 100:
-        #        break
-        #else:
-        #    eof_count = 0
+        # detect end of file, this is needed if the device is still logging but
+        # hasn't reached the end of the flash memory yet
+        if ord(c_str[0]) == 0xff:
+            eof_count += 1
+            if eof_count == 100:
+                break
+        else:
+            eof_count = 0
 
     f_in.close()
     f_out.close()
 
-def setHeartbeat(enable):
+def setHeartbeat(enable, cpm_to_usievert=None):
     if m_port == None:
         print('ERROR: no device connected')
         return -1
@@ -471,7 +503,15 @@ def setHeartbeat(enable):
                 if cpm == '':
                     continue
                 value = struct.unpack(">H", cpm)[0] & 0x3fff
-                print value
+
+                unit_value = (value, 'CPS')
+                if cpm_to_usievert != None:
+                    unit_value = cpmToUSievert(value, 'CPS', cpm_to_usievert)
+
+                if unit_value[1] == 'uSv/h':
+                    print('%.4f %s' % unit_value)
+                else:
+                    print('%d %s' % unit_value)
 
         except KeyboardInterrupt:
             print("")
@@ -673,7 +713,7 @@ def sendKey(key):
         m_port.write('<KEY3>>')
 
 def firmwareUpdate():
-    print 'option not yet available'
+    print('ERROR: option not yet available')
 
 def factoryReset():
     if m_port == None:
@@ -696,7 +736,7 @@ def dumpData(data):
     for d in range(len(data)):
         print "0x%02x 0x%02x (%s)" % (d, ord(data[d]), data[d])
 
-def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None):
+def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None, allow_fail=False):
     global m_port, m_deviceName
 
     if port == None or port == '':
@@ -705,7 +745,8 @@ def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None):
     try:
         m_port = serial.Serial(port, baudrate=baudrate, timeout=1.0)
     except serial.serialutil.SerialException:
-        print('ERROR: No device found')
+        if allow_fail == False:
+            print('ERROR: No device found')
         return -1
 
     clearPort()
@@ -778,6 +819,10 @@ if __name__ == "__main__":
         print("ERROR: the options '--output-in-cpm' and '--unit-conversion-from-device' can not be combined")
         sys.exit(-1)
 
+    if args.output_in_usievert != None and args.output_in_usievert != '' and args.unit_conversion_from_device != None:
+        print("ERROR: providing '--output-in-usievert' with a conversion factor can not be combined with the '--unit-conversion-from-device' option")
+        sys.exit(-1)
+
     if args.list_tool_config == True:
         print("baudrate                    = %s" % (baudrate))
         print("port                        = '%s'" % (port))
@@ -811,6 +856,13 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     if args.bin_file != None:
+        if args.unit_conversion_from_device == True:
+            res = openDevice(port=port, baudrate=baudrate, skip_check=skip_check, device_type=device_type, allow_fail=True)
+            if res != 0:
+                print('WARNING: no connection to device, defaulting to known unit conversion (%d CPM = %.2f uSv/h)' % cpm_to_usievert)
+            else:
+                cpm_to_usievert = getUnitConversionFromDevice()
+
         parseDataFile(bin_file, output_file, cpm_to_usievert=cpm_to_usievert)
         sys.exit(0)
 
@@ -856,8 +908,8 @@ if __name__ == "__main__":
     elif args.power_off == True:
         setPower(False)
 
-    elif args.heartbeat_on == True:
-        setHeartbeat(True)
+    elif args.heartbeat == True:
+        setHeartbeat(True, cpm_to_usievert=cpm_to_usievert)
 
     elif args.heartbeat_off == True:
         setHeartbeat(False)
@@ -889,7 +941,7 @@ if __name__ == "__main__":
     elif args.send_key != None:
         sendKey(args.send_key)
 
-    elif args.firmware_update == True:
+    elif args.firmware_update != None:
         firmwareUpdate()
 
     elif args.reset == True:
