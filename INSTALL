@@ -1,0 +1,35 @@
+Installation instructions
+=========================
+
+Dependencies
+------------
+
+- python 2.7
+- pyserial
+
+
+Linux installations
+-------------------
+Debian based system should use the apt package manager to install dependencies:
+
+$ sudo apt-get install python-serial
+
+
+Windows installations
+---------------------
+Windows based systems should install the individual components separately:
+
+* python 2.7
+https://www.python.org/download/releases/2.7/
+
+* pyserial
+pip install pyserial
+
+* USB CDC driver
+It's possibly needed to install an USB CDC driver as well
+
+
+OS X installations
+------------------
+Not tested, but should be possible. The Windows based install instructions
+should work here too.
