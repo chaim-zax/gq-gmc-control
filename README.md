@@ -128,3 +128,26 @@ and GMC-500 models are supported.
 
 --help
     Show a help message describing the usage and options of the tool.
+
+
+## Usage Windows
+
+Once the device is connected using usb a virtual com port should be available.
+Check the 'devices' in the control panel and look for COM & LPT ports. The
+one you are looking for is called like "USB Serial (COMx)" or "USB CDC (COMx)".
+Try disconnecting and reconnecting your GM GMC device and check which device
+dis- and re-appears. In the examples below we assume the device was connected
+to COM3.
+
+To get the device information the following command could be used:
+
+    C:\gq-gmc-control> C:\Python27\python gq-gmc-control.py -p COM3 -i
+
+Which should result (in the case of the GQ GMC-500 device) in:	GMC-500Re 1.03
+
+To get all history data in a CSV file:
+
+    C:\gq-gmc-control> C:\Python27\python gq-gmc-control.py -p COM3 -d
+
+Which should create a file called 'gq-gmc-log.csv'. The file can be opened in
+MS Excel, Matlab or any other tool which handles comma separated data.

@@ -308,9 +308,9 @@ def getData(address=0x000000, length=None, out_file=DEFAULT_BIN_FILE):
     # make sure we don't have any data in the device buffer
     clearPort()
 
-    if m_verbose == 1:
+    if m_verbose >= 1:
         print("storing data to '" + out_file + "'")
-    f_out = open(out_file, 'w')
+    f_out = open(out_file, 'wb')
 
     while True:
         cmd = struct.pack('>sssssBBBHss', '<', 'S', 'P', 'I', 'R', (sub_addr >> 16) & 0xff, (sub_addr >> 8) & 0xff, (sub_addr) & 0xff, sub_len, '>', '>')
@@ -381,13 +381,13 @@ def printData(out_file, data_type, c_str, size=1, cpm_to_usievert=None):
 def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_usievert=None):
     if in_file == None:
         in_file = DEFAULT_BIN_FILE
-    if m_verbose == 1:
+    if m_verbose >= 1:
         print("parsing file '" + in_file + "', and storing data to '" + out_file + "'")
 
     marker = 0
     eof_count = 0
     data_type = '*'
-    f_in = open(in_file, 'r')
+    f_in = open(in_file, 'rb')
     f_out = open(out_file, 'w')
     while True:
         c_str = f_in.read(1)
@@ -399,9 +399,11 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
         if marker == 0x55aa:
             # command: set count type
             if c == 0x00:
-                date = f_in.read(9)
+                data = f_in.read(9)
+                if data == '' or len(data) < 9:
+                    break
 
-                save_mode = ord(date[8])
+                save_mode = ord(data[8])
                 if save_mode == 0:
                     data_type = ''
                     mode_str = 'off'
@@ -421,29 +423,42 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
                     data_type = 'CPM'
                     mode_str = 'every minute - threshold'
 
-                f_out.write(',,20%02d/%02d/%02d %02d:%02d:%02d,%s' % (ord(date[0]), ord(date[1]), ord(date[2]), ord(date[3]), ord(date[4]), ord(date[5]), mode_str) + EOL)
+                f_out.write(',,20%02d/%02d/%02d %02d:%02d:%02d,%s' % (ord(data[0]), ord(data[1]), ord(data[2]), ord(data[3]), ord(data[4]), ord(data[5]), mode_str) + EOL)
 
             # command: two byte value (large numbers)
             elif c == 0x01:
                 data = f_in.read(2)
+                if data == '' or len(data) < 2:
+                    break
+
                 value = printData(f_out, data_type, data, size=2, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
             # command: three byte value (very large numbers)
             elif c == 0x02:
                 data = f_in.read(3)
+                if data == '' or len(data) < 3:
+                    break
+
                 value = printData(f_out, data_type, data, size=3, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
             # command: four byte value (huge numbers)
             elif c == 0x03:  # TODO: test me ;)
                 data = f_in.read(4)
+                if data == '' or len(data) < 4:
+                    break
+
                 value = printData(f_out, data_type, data, size=4, cpm_to_usievert=cpm_to_usievert)
                 f_out.write(value + EOL)
 
             # command: note
             elif c == 0x04:
-                length = ord(f_in.read(1))
+                data = f_in.read(1)
+                if data == '':
+                    break
+
+                length = ord(data)
                 data = f_in.read(length)
                 f_out.write(',,,,' + data + EOL)
 
