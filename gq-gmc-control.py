@@ -25,6 +25,7 @@ import platform
 import tempfile
 import ctypes
 import datetime
+import signal
 
 DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
@@ -79,16 +80,17 @@ m_port = DEFAULT_PORT
 m_configData = None
 m_config = None
 m_verbose = DEFAULT_VERBOSE_LEVEL
+m_terminate = False
 
 m_description = """
-Control tool  for the GQ GMC  Geiger Counters.  This tool  provices a convenient
-command line user interface to most of the device features (which are accessable
-by  usb).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
+Control tool  for the GQ GMC  Geiger Counters.  This tool  provides a convenient
+command line user interface to most of the device features (which are accessible
+by  USB).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
 supported.
 
 The    implementation     of    the     tool    is    based     on    GQ-RFC1201
 (http://www.gqelectronicsllc.com/download/GQ-RFC1201.txt), and testing done on a
-GQ GMC-500. It possible some incompatilities exisists with other GQ GMC devices.
+GQ GMC-500. It possible some incompatibilities exists with other GQ GMC devices.
 Any help to test  and debug these devices is welcome, and  will only improve the
 quality of this tool.  """
 
@@ -98,7 +100,7 @@ def handleArguments():
     parser = argparse.ArgumentParser(description=m_description, epilog=m_epilog)
     unit_group = parser.add_mutually_exclusive_group()
     group = parser.add_argument_group(title='commands',
-                                      description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
+                                      description='Device specific commands. Any of the following commands below can be send to the device. Only one command can be used at a time.')
     command_group = group.add_mutually_exclusive_group(required=True)
 
     # device settings
@@ -120,9 +122,9 @@ def handleArguments():
     unit_group.add_argument('-M', '--output-in-cpm', action='store_true', default=None,
                             help='log data in CPM or CPS')
     parser.add_argument('-K', '--skip-check', action='store_true', default=None,
-                        help="skip sanity/device checking on startup. the tool will use it's default settings, if needed use in combination with '--device-type' to overide these defaults (recommended when skipping device checking)")
+                        help="skip sanity/device checking on start-up. the tool will use it's default settings, if needed use in combination with '--device-type' to override these defaults (recommended when skipping device checking)")
     parser.add_argument('-Y', '--device-type', action='store', default='', nargs=1,
-                        help="don't use the autodetect feature to select the device-type, but use the one provided ('CMG-280', 'CMG-300', 'CMG-320' or 'CMG-500')")
+                        help="don't use the auto-detect feature to select the device-type, but use the one provided ('CMG-280', 'CMG-300', 'CMG-320' or 'CMG-500')")
     parser.add_argument('output_file', metavar='OUTPUT_FILE', nargs='?',
                         help='an output file')
     parser.add_argument('-u', '--unit-conversion-from-device', action='store_true',
@@ -162,7 +164,7 @@ def handleArguments():
                                help='shows the current device configuration')
     command_group.add_argument('-w', '--write-config', action='store', default=None,
                                nargs='+', metavar='PARAMETER=VALUE', dest='write_config',
-                               help="write a specific device configuration parameter. the following parmeters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated). note: this feature is only tested on a GQ GMC-500.")
+                               help="write a specific device configuration parameter. the following parameters are supported: 'cal1-cpm', 'cal1-sv', 'cal2-cpm', 'cal2-sv', 'cal3-cpm' and 'cal3-sv', the values depend on the type of argument (e.g. '1000' for cpm, '6.45' for us, '0x123' for addresses). multiple configuration parameters can be provided at once (space separated). note: this feature is only tested on a GQ GMC-500.")
     command_group.add_argument('-E', '--set-date-and-time', action='store', default=None,
                                type=validDateTime, metavar='"yy/mm/dd HH:MM:SS"',
                                help='set the local date and time')
@@ -171,7 +173,7 @@ def handleArguments():
                                help='get the local date and time')
     command_group.add_argument('-k', '--send-key', action='store', default=None,
                                choices=['S1', 'S2', 'S3', 'S4'],
-                               help='emulate a keypress of the device')
+                               help='emulate a key-press of the device')
     command_group.add_argument('-F', '--firmware-update', action='store', default=None,
                                help='update the firmware of the device (NOT IMPLEMENTED)')
     command_group.add_argument('-R', '--reset', action='store_true', default=None,
@@ -218,6 +220,11 @@ def checkDeviceType():
     global m_deviceType, m_deviceName
 
     m_deviceType = getDeviceType()
+
+    if m_deviceType == '' or len(m_deviceType) < 8:
+        print("ERROR: device not found or supported")
+        return -1
+
     m_deviceName = m_deviceType[:7]
 
     if m_deviceName == 'GMC-280' or \
@@ -240,7 +247,7 @@ def checkDeviceType():
 def getDeviceType():
     if m_port == None:
         print('ERROR: no device connected')
-        return -1
+        return ''
 
     m_port.write('<GETVER>>')
     deviceType = m_port.read(14)
@@ -253,6 +260,11 @@ def getSerialNumber():
 
     m_port.write('<GETSERIAL>>')
     serialNumber = m_port.read(7)
+
+    if serialNumber == '' or len(serialNumber) < 7:
+        print('WARNING: no valid serial number received')
+        return ''
+
     ser = ''
     for x in range(7):
         ser += "%02X" % ord(serialNumber[x])
@@ -279,6 +291,11 @@ def getVoltage():
 
     m_port.write('<GETVOLT>>')
     voltage = m_port.read(3)
+
+    if voltage == '' or len(voltage) < 3:
+        print('WARNING: no valid voltage received')
+        return ''
+
     return('%s V' % voltage)
 
 def getCPM(cpm_to_usievert=None):
@@ -288,6 +305,11 @@ def getCPM(cpm_to_usievert=None):
 
     m_port.write('<GETCPM>>')
     cpm = m_port.read(2)
+
+    if cpm == '' or len(cpm) < 2:
+        print('WARNING: no valid cpm received')
+        return ''
+
     value = struct.unpack(">H", cpm)[0]
 
     unit_value = (value, 'CPM')
@@ -326,8 +348,8 @@ def getData(address=0x000000, length=None, out_file=DEFAULT_BIN_FILE):
     f_out = open(out_file, 'wb')
 
     while True:
-        cmd = struct.pack('>sssssBBBHss', '<', 'S', 'P', 'I', 'R', (sub_addr >> 16) & 0xff, (sub_addr >> 8) & 0xff, (sub_addr) & 0xff, sub_len, '>', '>')
-        m_port.write(cmd)
+        cmd = struct.pack('>BBBH', (sub_addr >> 16) & 0xff, (sub_addr >> 8) & 0xff, (sub_addr) & 0xff, sub_len)
+        m_port.write('<SPIR' + cmd + '>>')
 
         data = m_port.read(sub_len)
         if data == '' or total_len >= length:
@@ -517,6 +539,10 @@ def parseDataFile(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE, cpm_to_us
     f_in.close()
     f_out.close()
 
+def exit_gracefully(signum, frame):
+    global m_terminate
+    m_terminate = True
+
 def setHeartbeat(enable, cpm_to_usievert=None):
     if m_port == None:
         print('ERROR: no device connected')
@@ -525,8 +551,11 @@ def setHeartbeat(enable, cpm_to_usievert=None):
     if enable == True:
         m_port.write('<HEARTBEAT1>>')
 
+        signal.signal(signal.SIGINT, exit_gracefully)
+        signal.signal(signal.SIGTERM, exit_gracefully)
+
         try:
-            while True:
+            while m_terminate == False:
                 cpm = m_port.read(2)
                 if cpm == '':
                     continue
@@ -543,6 +572,8 @@ def setHeartbeat(enable, cpm_to_usievert=None):
 
         except KeyboardInterrupt:
             print("")
+        except serial.SerialException:
+            pass
         finally:
             # make sure we stop the heartbeat
             m_port.write('<HEARTBEAT0>>')
@@ -564,10 +595,16 @@ def getTemperature():
 
     m_port.write('<GETTEMP>>')
     temp = m_port.read(4)
+
+    if temp == '' or len(temp) < 4:
+        print('WARNING: no valid temperature received')
+        return ''
+
     sign = ''
     if ord(temp[2]) != 0:
         sign = '-'
-    return("%s%d.%d %s%s" % (sign, ord(temp[0]), ord(temp[1]), unichr(0x00B0), unichr(0x0043)))
+    temp_str = "%s%d.%d %s%s" % (sign, ord(temp[0]), ord(temp[1]), unichr(0x00B0), unichr(0x0043))
+    return(temp_str.encode('utf-8'))
 
 def getGyro():
     if m_port == None:
@@ -576,6 +613,11 @@ def getGyro():
 
     m_port.write('<GETGYRO>>')
     gyro = m_port.read(7)
+
+    if gyro == '' or len(gyro) < 7:
+        print('WARNING: no valid gyro data received')
+        return ''
+
     (x, y, z, dummy) = struct.unpack(">hhhB", gyro)
     return "x:%d, y:%d, z:%d" % (x, y, z)
 
@@ -707,8 +749,12 @@ def getDateAndTime():
         return -1
 
     m_port.write('<GETDATETIME>>')
-
     date = m_port.read(7)
+
+    if date == '' or len(date) < 7:
+        print('WARNING: no valid date received')
+        return ''
+
     (year, month, day, hour, minute, second, dummy) = struct.unpack(">BBBBBBB", date)
     return "%d/%d/%d %d:%d:%d" % (year, month, day, hour, minute, second)
 
@@ -798,8 +844,6 @@ def openDevice(port=None, baudrate=115200, skip_check=False, device_type=None, a
 
 
 if __name__ == "__main__":
-    args = handleArguments()
-
     baudrate = DEFAULT_BAUDRATE
     port = DEFAULT_PORT
     bin_file = DEFAULT_BIN_FILE
@@ -812,6 +856,10 @@ if __name__ == "__main__":
     device_type = DEFAULT_DEVICE_TYPE
     verbose = DEFAULT_VERBOSE_LEVEL
 
+    # handle all command line options
+    args = handleArguments()
+
+    # load configuration file(s)
     home = os.path.expanduser("~")
     default_config = DEFAULT_CONFIG.replace('~', home)
     if os.path.isfile(default_config):
@@ -843,6 +891,9 @@ if __name__ == "__main__":
     if args.verbose != None:
         verbose = args.verbose
 
+    m_verbose = verbose
+
+    # aditional checks for conflicting command line parameters
     if args.unit_conversion_from_device != None and args.output_in_cpm != None:
         print("ERROR: the options '--output-in-cpm' and '--unit-conversion-from-device' can not be combined")
         sys.exit(-1)
@@ -851,6 +902,11 @@ if __name__ == "__main__":
         print("ERROR: providing '--output-in-usievert' with a conversion factor can not be combined with the '--unit-conversion-from-device' option")
         sys.exit(-1)
 
+    if no_parse == True and args.data != True:
+        print("ERROR: the '--no-parse' option can only be used with the '--data' option.")
+        sys.exit(-1)
+
+    # show existing configuration
     if args.list_tool_config == True:
         print("baudrate                    = %s" % (baudrate))
         print("port                        = '%s'" % (port))
@@ -868,12 +924,11 @@ if __name__ == "__main__":
         print("verbose                     = %d" % (verbose))
         sys.exit(0)
 
-    m_verbose = verbose
-
     # prefix the comport to support ports above COM9
     if platform.system() == 'Windows':
         port = '\\\\.\\' + port
 
+    # determine CPM to uSievert conversion factor
     cpm_to_usievert = None
     if output_in_cpm == False or args.output_in_usievert != None:
         conversion = output_in_usievert.split(',')
@@ -882,13 +937,9 @@ if __name__ == "__main__":
         else:
             cpm_to_usievert = (int(conversion[0]), float(conversion[1]))
 
-    # handle all operations
-    if no_parse == True and args.data != True:
-        print("ERROR: the '--no-parse' option can only be used with the '--data' option.")
-        sys.exit(-1)
-
+    # only parse a binary file, if needed
     if args.bin_file != None:
-        if args.unit_conversion_from_device == True:
+        if unit_conversion_from_device == True:
             res = openDevice(port=port, baudrate=baudrate, skip_check=skip_check, device_type=device_type, allow_fail=True)
             if res != 0:
                 print('WARNING: no connection to device, defaulting to known unit conversion (%d CPM = %.2f uSv/h)' % cpm_to_usievert)
@@ -901,13 +952,16 @@ if __name__ == "__main__":
     if args.device_info == True:
         skip_check = True
 
+    # all commands below require a connected device
     res = openDevice(port=port, baudrate=baudrate, skip_check=skip_check, device_type=device_type)
     if res != 0:
         sys.exit(-res)
 
-    if args.unit_conversion_from_device == True:
+    # determine CPM to uSievert conversion factor by using the calibration values from the device
+    if unit_conversion_from_device == True:
         cpm_to_usievert = getUnitConversionFromDevice()
 
+    # parse all history data, and get it from the device if needed
     if args.data == True:
         tmp_file = None
         bin_output_file = ''
@@ -927,6 +981,8 @@ if __name__ == "__main__":
 
         if tmp_file != None and os.path.exists(tmp_file):
             os.remove(tmp_file)
+
+    # handle the rest of the commands
 
     elif args.device_info == True:
         print getDeviceType()

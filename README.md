@@ -1,13 +1,13 @@
 # gq-gmc-control
 
-Control tool  for the GQ GMC  Geiger Counters.  This tool  provices a convenient
-command line user interface to most of the device features (which are accessable
-by  usb).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
+Control tool  for the GQ GMC  Geiger Counters.  This tool  provides a convenient
+command line user interface to most of the device features (which are accessible
+by  USB).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
 supported.
 
 The    implementation     of    the     tool    is    based     on    GQ-RFC1201
 (http://www.gqelectronicsllc.com/download/GQ-RFC1201.txt), and testing done on a
-GQ GMC-500. It possible some incompatilities exisists with other GQ GMC devices.
+GQ GMC-500. It possible some incompatibilities exists with other GQ GMC devices.
 Any help to test  and debug these devices is welcome, and  will only improve the
 quality of this tool.
 
@@ -89,7 +89,7 @@ quality of this tool.
 --baudrate
     Set the baud-rate of the serial port (default 115200).
 
---port PORT
+--port
     Set the serial port (default '/dev/ttyUSB0').
 
 --no-parse
