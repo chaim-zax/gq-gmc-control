@@ -23,10 +23,10 @@ Windows based systems should install the individual components separately:
 https://www.python.org/download/releases/2.7/
 
 * pyserial
-pip install pyserial
+C:\Python27\Scripts> pip install pyserial
 
 * USB CDC driver
-It's possibly needed to install an USB CDC driver as well
+https://msdn.microsoft.com/en-us/library/windows/hardware/dn707976(v=vs.85).aspx
 
 
 OS X installations
