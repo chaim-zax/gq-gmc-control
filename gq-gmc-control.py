@@ -30,7 +30,7 @@ DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
 DEFAULT_CSV_FILE = 'gq-gmc-log.csv'
 if platform.system() == 'Windows':
-    DEFAULT_PORT = 'COM3'         # or '\\.\COM10'
+    DEFAULT_PORT = 'COM3'
 else:
     DEFAULT_PORT = '/dev/ttyUSB0'
 DEFAULT_BAUDRATE = 115200
@@ -871,8 +871,8 @@ if __name__ == "__main__":
     m_verbose = verbose
 
     # prefix the comport to support ports above COM9
-    #if platform.system() == 'Windows':
-    #    port = '\\.\\' + port
+    if platform.system() == 'Windows':
+        port = '\\\\.\\' + port
 
     cpm_to_usievert = None
     if output_in_cpm == False or args.output_in_usievert != None:
