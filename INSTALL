@@ -10,9 +10,45 @@ Dependencies
 
 Linux installations
 -------------------
-Debian based system should use the apt package manager to install dependencies:
+This tool requires  access to one of  the tty devices. By  default these devices
+can only  be access when a  user is in the  group 'plugdev'. To add  the current
+user to this group use the following command:
+
+$ sudo adduser $USER plugdev
+
+The change becomes active the next time you log in.
+
+On most Linux systems you should use the package manager to install new packages
+and their  dependencies.  Manual installation  of software these days  is rarely
+necessary, and only makes it harder to maintain your system.
+
+On Debian based Linux systems (like Ubuntu):
 
 $ sudo apt-get install python-serial
+
+On Fedora and CentOS based Linux systems:
+
+$ sudo yum install pyserial
+
+On Red Hat based Linux systems:
+
+$ sudo rpm --install pyserial
+
+On Slackware based Linux systems:
+
+$ sudo installpkg pyserial
+
+On Arch Linux based Linux systems:
+
+$ sudo pacman --sync python-pyserial
+
+On Gentoo based Linux systems:
+
+$ sudo emerge pyserial
+
+If every else fails, use the python package manager:
+
+$ sudo pip install pyserial
 
 
 Windows installations

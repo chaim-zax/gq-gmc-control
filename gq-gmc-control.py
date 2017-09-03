@@ -30,7 +30,7 @@ DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
 DEFAULT_CSV_FILE = 'gq-gmc-log.csv'
 if platform.system() == 'Windows':
-    DEFAULT_PORT = '\\.\COM4'
+    DEFAULT_PORT = 'COM3'         # or '\\.\COM10'
 else:
     DEFAULT_PORT = '/dev/ttyUSB0'
 DEFAULT_BAUDRATE = 115200
@@ -75,14 +75,27 @@ CONFIGUATION_BUFFER_SIZE['GMC-500'] = 0x200
 
 m_deviceType = None
 m_deviceName = DEFAULT_DEVICE_TYPE
-m_port = None
+m_port = DEFAULT_PORT
 m_configData = None
 m_config = None
 m_verbose = DEFAULT_VERBOSE_LEVEL
 
+m_description = """
+Control tool  for the GQ GMC  Geiger Counters.  This tool  provices a convenient
+command line user interface to most of the device features (which are accessable
+by  usb).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
+supported.
+
+The    implementation     of    the     tool    is    based     on    GQ-RFC1201
+(http://www.gqelectronicsllc.com/download/GQ-RFC1201.txt), and testing done on a
+GQ GMC-500. It possible some incompatilities exisists with other GQ GMC devices.
+Any help to test  and debug these devices is welcome, and  will only improve the
+quality of this tool.  """
+
+m_epilog = "Copyright (c) 2017, Chaim Zax <chaim.zax@gmail.com>"
+
 def handleArguments():
-    parser = argparse.ArgumentParser(description='Control tool for the GQ GMC Geiger Counters. This tool provices a convenient command line user interface to most of the device features (which are accessable by usb). Currently the GMC-280, GMC-300, GMC-320 and GMC-500 models are supported.',
-                                     epilog="Copyright (c) 2017, Chaim Zax <chaim.zax@gmail.com>")
+    parser = argparse.ArgumentParser(description=m_description, epilog=m_epilog)
     unit_group = parser.add_mutually_exclusive_group()
     group = parser.add_argument_group(title='commands',
                                       description='Device specific commands. Any of the following commands below can be send to de device. Only one command can be used at a time.')
@@ -856,6 +869,10 @@ if __name__ == "__main__":
         sys.exit(0)
 
     m_verbose = verbose
+
+    # prefix the comport to support ports above COM9
+    #if platform.system() == 'Windows':
+    #    port = '\\.\\' + port
 
     cpm_to_usievert = None
     if output_in_cpm == False or args.output_in_usievert != None:
