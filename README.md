@@ -1,9 +1,9 @@
 # gq-gmc-control
 
 Control tool  for the GQ GMC  Geiger Counters.  This tool  provides a convenient
-command line user interface to most of the device features (which are accessible
-by  USB).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
-supported.
+cross platform (Linux,  Windows & OS X)  command line user interface  to most of
+the  device features  (which are  accessible  by USB).   Currently the  GMC-280,
+GMC-300, GMC-320 and GMC-500 models are supported.
 
 The    implementation     of    the     tool    is    based     on    GQ-RFC1201
 (http://www.gqelectronicsllc.com/download/GQ-RFC1201.txt), and testing done on a

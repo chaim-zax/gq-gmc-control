@@ -84,9 +84,9 @@ m_terminate = False
 
 m_description = """
 Control tool  for the GQ GMC  Geiger Counters.  This tool  provides a convenient
-command line user interface to most of the device features (which are accessible
-by  USB).  Currently  the  GMC-280,  GMC-300, GMC-320  and  GMC-500  models  are
-supported.
+cross platform (Linux,  Windows & OS X)  command line user interface  to most of
+the  device features  (which are  accessible  by USB).   Currently the  GMC-280,
+GMC-300, GMC-320 and GMC-500 models are supported.
 
 The    implementation     of    the     tool    is    based     on    GQ-RFC1201
 (http://www.gqelectronicsllc.com/download/GQ-RFC1201.txt), and testing done on a
@@ -700,7 +700,7 @@ def writeConfig(parameters):
     for par in parameters:
         par_value = par.split('=')
         if len(par_value) != 2:
-            print("WARNING: skipping parameter '%s', it doesn't seem to contain a parametername:value pair." % par)
+            print("WARNING: skipping parameter '%s', it doesn't seem to contain a 'parametername=value' pair." % par)
             continue
 
         if par_value[0] == 'cal1-cpm':
