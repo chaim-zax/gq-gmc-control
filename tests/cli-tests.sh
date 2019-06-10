@@ -105,7 +105,7 @@ verify_fail "--heartbeat --heartbeat-off"
 verify_fail ""
 
 verify_pass "--device-info"
-verify_pass "--device-info --baudrate 115200"
+verify_pass "--device-info --baud-rate 115200"
 verify_pass "--device-info --port /dev/ttyUSB0"
 verify_pass "--device-info --config ~/.gq-gmc-control.conf"
 verify_pass "--device-info --skip-check"
