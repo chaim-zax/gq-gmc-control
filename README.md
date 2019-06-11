@@ -86,7 +86,7 @@ quality of this tool.
 
 ## The following additional options are provided:
 
---baudrate
+--baud-rate
     Set the baud-rate of the serial port (default 115200).
 
 --port

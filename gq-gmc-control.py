@@ -516,7 +516,7 @@ def parse_data_file(in_file=DEFAULT_BIN_FILE, out_file=DEFAULT_CSV_FILE,
                     data_type = 'CPM'
                     mode_str = 'every minute'
                 elif save_mode == 3:
-                    data_type = 'CPH'
+                    data_type = 'CPM'
                     mode_str = 'every hour'
                 elif save_mode == 4:
                     data_type = 'CPS'
