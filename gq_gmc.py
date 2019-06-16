@@ -26,9 +26,9 @@ DEFAULT_CONFIG = '~/.gq-gmc-control.conf'
 DEFAULT_BIN_FILE = 'gq-gmc-log.bin'
 DEFAULT_CSV_FILE = 'gq-gmc-log.csv'
 if platform.system() == 'Windows':
-    DEFAULT_PORT = 'COM3'
+    DEFAULT_PORT = 'COM99'
 else:
-    DEFAULT_PORT = '/dev/ttyUSB0'
+    DEFAULT_PORT = '/dev/gq-gmc'  # try '/dev/ttyUSB0' without udev rules
 DEFAULT_BAUD_RATE = 115200
 DEFAULT_CPM_TO_SIEVERT = '1000,6.50'
 DEFAULT_OUTPUT_IN_CPM = False
@@ -772,7 +772,10 @@ def open_device(port=None, baud_rate=115200, skip_check=False, device_type=None,
         m_device = serial.Serial(port, baudrate=baud_rate, timeout=1.0)
     except serial.serialutil.SerialException:
         if not allow_fail:
-            print('ERROR: No device found')
+            if platform.system() == 'Windows':
+                print("ERROR: No device found (use the '-p COM1' option and provide the correct port)")
+            else:
+                print("ERROR: No device found (use the '-p /dev/ttyUSB0' option and provide the correct port, or install the udev rule as described in the INSTALL file)")
         return -1
 
     clear_port()

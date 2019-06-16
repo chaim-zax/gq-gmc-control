@@ -10,13 +10,18 @@ Dependencies
 
 Linux installations
 -------------------
-This tool requires  access to one of  the tty devices. By  default these devices
-can only  be access when a  user is in the  group 'plugdev'. To add  the current
-user to this group use the following command:
 
-$ sudo adduser $USER plugdev
+This tool requires access to one of the tty devices. By default these devices
+can only be access when a user is in the group 'plugdev' or 'dialout'. To add
+the current user to this group use the following command:
+
+$ sudo adduser $USER dialout
 
 The change becomes active the next time you log in.
+
+Alternatively install the udev rules provided by coping the 99-gq-gmc.rules file
+to /etc/udev/rules.d (directory might vary per distribution). Restart udev to
+make changes active (sudo systemctl restart udev).
 
 On most Linux systems you should use the package manager to install new packages
 and their  dependencies.  Manual installation  of software these days  is rarely

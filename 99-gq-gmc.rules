@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEMS=="usb", ATTRS{idProduct}=="7523", ATTRS{idVendor}=="1a86", SYMLINK+="gq-gmc", MODE="666"
