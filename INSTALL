@@ -72,5 +72,17 @@ https://msdn.microsoft.com/en-us/library/windows/hardware/dn707976(v=vs.85).aspx
 
 OS X installations
 ------------------
-Not tested, but should be possible. The Windows based install instructions
-should work here too.
+
+Confirmed works
+
+Few changes:
+
+`pip install pyserial`
+
+Look your `/dev` and look for usb
+
+`ls -al | grep usb`
+
+`/dev/tty.usbserial-1410`
+
+Replace line 31 in `gq_gmc.py` to `DEFAULT_PORT = '/dev/tty.usbserial-1410'`
